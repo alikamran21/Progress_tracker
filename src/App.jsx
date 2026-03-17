@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Download, CheckCircle, Circle, ExternalLink, BookOpen, Video, Info, Share2, Check } from 'lucide-react';
+import {
+  Download, CheckCircle, Circle, ExternalLink, BookOpen,
+  Video, Info, Share2, Check, ChevronRight, Zap, Target,
+  Trophy, BarChart2, X, Menu
+} from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc } from 'firebase/firestore';
 
 // ==========================================
-// 🔴 FIREBASE CONFIG (Add your keys here later)
+// FIREBASE CONFIG
 // ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyA7St3c6bC6T_SvUXSUMs1f5Nz8CmBWDMQ",
@@ -17,7 +21,6 @@ const firebaseConfig = {
   measurementId: "G-S9P5MR3RCE"
 };
 
-// Initialize Firebase (This will silently fail until you add real keys, which is fine for local testing!)
 let app, auth, db;
 try {
   app = initializeApp(firebaseConfig);
@@ -73,98 +76,114 @@ const projectData = [
   { week: 4, title: 'The Portfolio Showreel', desc: 'Build a 1 to 2-minute dynamic showreel combining gameplay, talking head, motion graphics, and advanced Fusion VFX.' }
 ];
 
+const WEEK_COLORS = {
+  1: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-500' },
+  2: { bg: 'bg-violet-50', text: 'text-violet-700', border: 'border-violet-200', dot: 'bg-violet-500' },
+  3: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', dot: 'bg-amber-500' },
+  4: { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', dot: 'bg-rose-500' },
+};
+
+function DifficultyBadge({ difficulty }) {
+  const [current, total] = difficulty.split('/').map(Number);
+  const isEasy = current <= 3;
+  const isMed = current <= 6;
+  const cls = isEasy
+    ? 'bg-emerald-50 text-emerald-700'
+    : isMed
+    ? 'bg-amber-50 text-amber-700'
+    : 'bg-rose-50 text-rose-700';
+  return (
+    <span className={`badge ${cls} border border-current/20`} style={{ fontSize: '0.65rem', padding: '0.15rem 0.45rem' }}>
+      {difficulty}
+    </span>
+  );
+}
+
+function WeekBadge({ week }) {
+  const c = WEEK_COLORS[week];
+  return (
+    <span className={`badge ${c.bg} ${c.text} border ${c.border}`} style={{ fontSize: '0.65rem', padding: '0.15rem 0.45rem' }}>
+      Wk {week}
+    </span>
+  );
+}
+
+function StatCard({ icon: Icon, label, value, sub, color }) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-100 p-5 shadow-card flex items-start gap-4">
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${color}`}>
+        <Icon className="w-5 h-5" />
+      </div>
+      <div>
+        <p className="text-2xl font-semibold text-slate-900 leading-none">{value}</p>
+        <p className="text-sm text-slate-500 mt-1">{label}</p>
+        {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [completedDays, setCompletedDays] = useState([]);
   const [feedbackData, setFeedbackData] = useState({});
   const [activeWeekFilter, setActiveWeekFilter] = useState('All');
   const [showResources, setShowResources] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Cloud Sync State
   const [user, setUser] = useState(null);
   const [trackerId, setTrackerId] = useState('');
   const [copied, setCopied] = useState(false);
 
-  // 1. Initialize Anonymous Auth & Routing (Hash-based sharing)
   useEffect(() => {
-    if (!auth) return; // Skip if Firebase failed to load locally
-
+    if (!auth) return;
     const initAuth = async () => {
-      try {
-        await signInAnonymously(auth);
-      } catch (error) {
-        console.error("Auth error:", error);
-      }
+      try { await signInAnonymously(auth); } catch (error) { console.error("Auth error:", error); }
     };
     initAuth();
-
     const unsubscribe = onAuthStateChanged(auth, setUser);
-
     let currentHash = window.location.hash.replace('#', '');
     if (!currentHash) {
       currentHash = crypto.randomUUID();
       window.location.hash = currentHash;
     }
     setTrackerId(currentHash);
-
-    const handleHashChange = () => {
-      setTrackerId(window.location.hash.replace('#', ''));
-    };
+    const handleHashChange = () => setTrackerId(window.location.hash.replace('#', ''));
     window.addEventListener('hashchange', handleHashChange);
-
-    return () => {
-      unsubscribe();
-      window.removeEventListener('hashchange', handleHashChange);
-    };
+    return () => { unsubscribe(); window.removeEventListener('hashchange', handleHashChange); };
   }, []);
 
-  // 2. Fetch Data from Firestore
   useEffect(() => {
     if (!user || !trackerId || !db) return;
-
     const docRef = doc(db, 'trackers', trackerId);
-    
     const unsubscribeDb = onSnapshot(docRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
         setCompletedDays(data.completedDays || []);
         setFeedbackData(data.feedbackData || {});
       }
-    }, (error) => {
-      console.error("Firestore error:", error);
-    });
-
+    }, (error) => console.error("Firestore error:", error));
     return () => unsubscribeDb();
   }, [user, trackerId]);
 
-  // Cloud Sync Saver
   const saveToDb = async (newCompleted, newFeedback) => {
     if (!user || !trackerId || !db) return;
     try {
       const docRef = doc(db, 'trackers', trackerId);
-      await setDoc(docRef, {
-        completedDays: newCompleted,
-        feedbackData: newFeedback,
-        updatedAt: Date.now()
-      }, { merge: true });
-    } catch (error) {
-      console.error("Error saving data:", error);
-    }
+      await setDoc(docRef, { completedDays: newCompleted, feedbackData: newFeedback, updatedAt: Date.now() }, { merge: true });
+    } catch (error) { console.error("Error saving data:", error); }
   };
 
   const toggleDay = (dayNum) => {
-    let newCompleted;
-    if (completedDays.includes(dayNum)) {
-      newCompleted = completedDays.filter(d => d !== dayNum);
-    } else {
-      newCompleted = [...completedDays, dayNum];
-    }
-    setCompletedDays(newCompleted); // Optimistic UI
+    const newCompleted = completedDays.includes(dayNum)
+      ? completedDays.filter(d => d !== dayNum)
+      : [...completedDays, dayNum];
+    setCompletedDays(newCompleted);
     saveToDb(newCompleted, feedbackData);
   };
 
   const updateFeedback = (dayNum, text) => {
     const newFeedback = { ...feedbackData, [dayNum]: text };
-    setFeedbackData(newFeedback); // Optimistic UI
+    setFeedbackData(newFeedback);
     saveToDb(completedDays, newFeedback);
   };
 
@@ -174,236 +193,397 @@ export default function App() {
     textArea.value = url;
     document.body.appendChild(textArea);
     textArea.select();
-    try {
-      document.execCommand('copy');
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy', err);
-    }
+    try { document.execCommand('copy'); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch (err) { console.error('Failed to copy', err); }
     document.body.removeChild(textArea);
   };
 
   const exportToCSV = () => {
-    const headers = [
-      'Day', 'Week', 'Topic', 'Step-by-step learning', 'Practice task', 
-      'Daily assignment', 'Mini challenge', 'Common mistakes', 
-      'Shortcuts', 'Tutorial Link', 'Status', 'Feedback', 'Difficulty'
-    ];
-
+    const headers = ['Day', 'Week', 'Topic', 'Step-by-step learning', 'Practice task', 'Daily assignment', 'Mini challenge', 'Common mistakes', 'Shortcuts', 'Tutorial Link', 'Status', 'Feedback', 'Difficulty'];
     const rows = courseData.map(day => {
       const isDone = completedDays.includes(day.day) ? 'Done' : 'Pending';
       const feedback = feedbackData[day.day] || '';
-      
-      return [
-        day.day, 
-        day.week, 
-        `"${day.topic}"`, 
-        `"${day.learning}"`, 
-        `"${day.practice}"`, 
-        `"${day.assignment}"`, 
-        `"${day.challenge}"`, 
-        `"${day.mistakes}"`, 
-        `"${day.shortcuts}"`, 
-        `"${day.linkUrl}"`, 
-        isDone, 
-        `"${feedback}"`, 
-        `"${day.difficulty}"`
-      ].join(',');
+      return [day.day, day.week, `"${day.topic}"`, `"${day.learning}"`, `"${day.practice}"`, `"${day.assignment}"`, `"${day.challenge}"`, `"${day.mistakes}"`, `"${day.shortcuts}"`, `"${day.linkUrl}"`, isDone, `"${feedback}"`, `"${day.difficulty}"`].join(',');
     });
-
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
-    const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
+    link.setAttribute("href", encodeURI(csvContent));
     link.setAttribute("download", "DaVinci_Resolve_Masterclass_Tracker.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  const filteredData = activeWeekFilter === 'All' 
-    ? courseData 
-    : courseData.filter(d => d.week === parseInt(activeWeekFilter));
-
+  const filteredData = activeWeekFilter === 'All' ? courseData : courseData.filter(d => d.week === parseInt(activeWeekFilter));
   const progressPercentage = Math.round((completedDays.length / courseData.length) * 100);
 
+  const weekCompletions = [1, 2, 3, 4].map(w => {
+    const days = courseData.filter(d => d.week === w);
+    return days.filter(d => completedDays.includes(d.day)).length;
+  });
+
+  const navWeeks = ['All', '1', '2', '3', '4'];
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
-      {/* Header & Controls */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4 shadow-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-              <Video className="w-7 h-7 text-indigo-600" />
-              DaVinci Resolve Masterclass
-            </h1>
-            <div className="flex items-center gap-4 mt-2">
-              <div className="w-48 bg-slate-200 rounded-full h-2.5">
-                <div className="bg-indigo-600 h-2.5 rounded-full transition-all duration-500" style={{ width: `${progressPercentage}%` }}></div>
-              </div>
-              <span className="text-sm text-slate-600 font-medium">{progressPercentage}% Complete ({completedDays.length}/28)</span>
+    <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
+
+      {/* Sidebar overlay for mobile */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 z-20 md:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
+      {/* Sidebar */}
+      <aside className={`
+        fixed md:static inset-y-0 left-0 z-30
+        w-64 flex-shrink-0 flex flex-col
+        bg-sidebar-DEFAULT text-sidebar-text
+        transition-transform duration-200
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+      `} style={{ background: '#0f172a' }}>
+
+        {/* Logo */}
+        <div className="flex items-center justify-between px-6 py-5 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center flex-shrink-0">
+              <Video className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white leading-none">DaVinci</p>
+              <p className="text-xs text-slate-400 leading-none mt-0.5">Masterclass</p>
             </div>
           </div>
-          
-          <div className="flex gap-3 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
-            <button 
-              onClick={copyShareLink}
-              className={`flex items-center gap-2 px-4 py-2 ${copied ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-indigo-100 hover:bg-indigo-200 text-indigo-700'} rounded-lg text-sm font-medium transition-colors shadow-sm whitespace-nowrap`}
-            >
-              {copied ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
-              {copied ? 'Link Copied!' : 'Share Live Link'}
-            </button>
-            <button 
-              onClick={() => setShowResources(!showResources)}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors whitespace-nowrap"
-            >
-              <Info className="w-4 h-4" />
-              Resources & Projects
-            </button>
-            <button 
-              onClick={exportToCSV}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm whitespace-nowrap"
-            >
-              <Download className="w-4 h-4" />
-              Export to CSV
-            </button>
-          </div>
+          <button onClick={() => setSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white">
+            <X className="w-4 h-4" />
+          </button>
         </div>
-      </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 p-6 max-w-[1600px] mx-auto w-full flex flex-col gap-6">
-        
-        {/* Expandable Resources Box */}
-        {showResources && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-indigo-50 border border-indigo-100 p-6 rounded-xl shadow-sm">
-            <div>
-              <h3 className="font-bold text-lg text-indigo-900 mb-3 flex items-center gap-2">
-                <BookOpen className="w-5 h-5" /> Practice Resources
-              </h3>
-              <ul className="space-y-2 text-sm text-indigo-800">
-                <li><strong>Video:</strong> {resourceData.video}</li>
-                <li><strong>Gaming:</strong> {resourceData.gaming}</li>
-                <li><strong>Cinematic:</strong> {resourceData.cinematic}</li>
-                <li><strong>Audio:</strong> {resourceData.audio}</li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-bold text-lg text-indigo-900 mb-3">Weekly Portfolio Projects</h3>
-              <div className="space-y-3">
-                {projectData.map((proj) => (
-                  <div key={proj.week} className="bg-white p-3 rounded shadow-sm text-sm border border-indigo-50">
-                    <span className="font-semibold text-indigo-700">Week {proj.week}: {proj.title}</span>
-                    <p className="text-slate-600 mt-1">{proj.desc}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+        {/* Progress summary */}
+        <div className="px-6 py-5 border-b border-white/10">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Overall Progress</span>
+            <span className="text-xs font-semibold text-white">{progressPercentage}%</span>
           </div>
-        )}
+          <div className="progress-bar">
+            <div className="progress-fill" style={{ width: `${progressPercentage}%` }} />
+          </div>
+          <p className="text-xs text-slate-400 mt-2">{completedDays.length} of 28 days complete</p>
+        </div>
 
-        {/* Filters */}
-        <div className="flex gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
-          {['All', '1', '2', '3', '4'].map(week => (
+        {/* Week navigation */}
+        <nav className="flex-1 px-4 py-4 overflow-y-auto">
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wider px-2 mb-3">Filter by Week</p>
+          {navWeeks.map(week => {
+            const isActive = activeWeekFilter === week;
+            const label = week === 'All' ? 'Full Program' : `Week ${week}`;
+            const weekNum = parseInt(week);
+            const c = WEEK_COLORS[weekNum];
+            const done = week !== 'All' ? weekCompletions[weekNum - 1] : completedDays.length;
+            const total = week !== 'All' ? 7 : 28;
+            return (
+              <button
+                key={week}
+                onClick={() => { setActiveWeekFilter(week); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg mb-1 text-sm font-medium transition-all ${
+                  isActive
+                    ? 'bg-primary text-white'
+                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  {week !== 'All' && <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive ? 'bg-white' : c.dot}`} />}
+                  <span>{label}</span>
+                </div>
+                <span className={`text-xs ${isActive ? 'text-white/70' : 'text-slate-500'}`}>{done}/{total}</span>
+              </button>
+            );
+          })}
+
+          {/* Resources toggle */}
+          <div className="mt-6">
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wider px-2 mb-3">Quick Access</p>
             <button
-              key={week}
-              onClick={() => setActiveWeekFilter(week)}
-              className={`px-4 py-1.5 rounded-t-lg text-sm font-medium transition-colors ${
-                activeWeekFilter === week 
-                  ? 'bg-white text-indigo-700 border-t border-l border-r border-slate-200' 
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/50'
+              onClick={() => setShowResources(v => !v)}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                showResources ? 'bg-primary text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
-              {week === 'All' ? 'Full Program' : `Week ${week}`}
+              <BookOpen className="w-4 h-4 flex-shrink-0" />
+              <span>Resources & Projects</span>
             </button>
-          ))}
-        </div>
-
-        {/* Spreadsheet Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm whitespace-nowrap min-w-[1200px]">
-              <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 uppercase text-xs font-bold tracking-wider">
-                <tr>
-                  <th className="p-4 w-16 text-center">Status</th>
-                  <th className="p-4 w-16">Day</th>
-                  <th className="p-4 w-16">Wk</th>
-                  <th className="p-4 w-64 min-w-[200px]">Topic</th>
-                  <th className="p-4 min-w-[300px]">Daily Assignment</th>
-                  <th className="p-4 min-w-[250px]">Step-by-step</th>
-                  <th className="p-4 min-w-[200px]">Practice Task</th>
-                  <th className="p-4 min-w-[200px]">Mini Challenge</th>
-                  <th className="p-4 min-w-[200px]">Mistakes to Avoid</th>
-                  <th className="p-4 min-w-[200px]">Shortcuts / Tips</th>
-                  <th className="p-4 min-w-[150px]">Tutorial</th>
-                  <th className="p-4 w-20">Diff.</th>
-                  <th className="p-4 min-w-[250px]">Feedback / Notes</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredData.map((day) => {
-                  const isDone = completedDays.includes(day.day);
-                  return (
-                    <tr 
-                      key={day.day} 
-                      className={`hover:bg-indigo-50/30 transition-colors ${isDone ? 'bg-green-50/20' : ''}`}
-                    >
-                      <td className="p-4 text-center align-top cursor-pointer" onClick={() => toggleDay(day.day)}>
-                        {isDone ? (
-                          <CheckCircle className="w-6 h-6 text-green-500 mx-auto" />
-                        ) : (
-                          <Circle className="w-6 h-6 text-slate-300 hover:text-indigo-400 mx-auto transition-colors" />
-                        )}
-                      </td>
-                      <td className="p-4 font-semibold text-slate-700 align-top">{day.day}</td>
-                      <td className="p-4 text-slate-500 align-top">{day.week}</td>
-                      <td className="p-4 font-medium text-slate-900 align-top whitespace-normal">{day.topic}</td>
-                      <td className="p-4 text-indigo-700 font-medium align-top whitespace-normal">{day.assignment}</td>
-                      <td className="p-4 text-slate-600 align-top whitespace-normal">
-                        <ul className="list-disc pl-4 space-y-1">
-                          {day.learning.split(/(?=\d\.)/g).map((item, i) => (
-                            <li key={i}>{item.trim()}</li>
-                          ))}
-                        </ul>
-                      </td>
-                      <td className="p-4 text-slate-600 align-top whitespace-normal">{day.practice}</td>
-                      <td className="p-4 text-orange-600 align-top whitespace-normal">{day.challenge}</td>
-                      <td className="p-4 text-red-600 align-top whitespace-normal text-xs">{day.mistakes}</td>
-                      <td className="p-4 text-slate-600 align-top whitespace-normal text-xs font-mono bg-slate-50 rounded">
-                        {day.shortcuts}
-                      </td>
-                      <td className="p-4 align-top">
-                        <a 
-                          href={day.linkUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline whitespace-normal"
-                        >
-                          <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                          <span className="line-clamp-2">{day.linkText}</span>
-                        </a>
-                      </td>
-                      <td className="p-4 text-slate-500 align-top">
-                        <span className="bg-slate-100 px-2 py-1 rounded text-xs font-semibold">{day.difficulty}</span>
-                      </td>
-                      <td className="p-4 align-top">
-                        <input 
-                          type="text" 
-                          placeholder="Time / Hurdles / Rating..." 
-                          className="w-full bg-white border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                          value={feedbackData[day.day] || ''}
-                          onChange={(e) => updateFeedback(day.day, e.target.value)}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
           </div>
+        </nav>
+
+        {/* Sidebar footer actions */}
+        <div className="px-4 py-4 border-t border-white/10 space-y-2">
+          <button
+            onClick={copyShareLink}
+            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              copied ? 'bg-emerald-600 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            {copied ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
+            {copied ? 'Link Copied!' : 'Share Progress Link'}
+          </button>
+          <button
+            onClick={exportToCSV}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary-hover transition-all"
+          >
+            <Download className="w-4 h-4" />
+            Export to CSV
+          </button>
         </div>
-      </main>
+      </aside>
+
+      {/* Main area */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+
+        {/* Top header bar */}
+        <header className="flex-shrink-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between gap-4" style={{ boxShadow: '0 1px 0 0 #e2e8f0' }}>
+          <div className="flex items-center gap-4 min-w-0">
+            <button onClick={() => setSidebarOpen(true)} className="md:hidden text-slate-500 hover:text-slate-900 flex-shrink-0">
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="min-w-0">
+              <h1 className="text-base font-semibold text-slate-900 leading-none truncate">
+                {activeWeekFilter === 'All' ? 'Full 28-Day Program' : `Week ${activeWeekFilter} — ${['Interface & Foundations', 'Storytelling & Effects', 'Advanced Techniques', 'Mastery & Portfolio'][parseInt(activeWeekFilter) - 1]}`}
+              </h1>
+              <p className="text-xs text-slate-400 mt-1">{filteredData.length} lessons &bull; {filteredData.filter(d => completedDays.includes(d.day)).length} completed</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="hidden sm:flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-xs font-medium text-slate-600">Cloud sync active</span>
+            </div>
+          </div>
+        </header>
+
+        {/* Scrollable content */}
+        <main className="flex-1 overflow-y-auto">
+          <div className="p-6 max-w-[1800px] mx-auto flex flex-col gap-6">
+
+            {/* Stats row */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard icon={BarChart2} label="Overall Progress" value={`${progressPercentage}%`} sub={`${completedDays.length}/28 days`} color="bg-blue-50 text-blue-600" />
+              <StatCard icon={Trophy} label="Week 1 Complete" value={`${weekCompletions[0]}/7`} color="bg-violet-50 text-violet-600" />
+              <StatCard icon={Target} label="Current Streak" value={(() => {
+                let streak = 0;
+                for (let i = 28; i >= 1; i--) {
+                  if (completedDays.includes(i)) streak++;
+                  else break;
+                }
+                return streak;
+              })()} sub="days in a row" color="bg-amber-50 text-amber-600" />
+              <StatCard icon={Zap} label="Remaining Days" value={28 - completedDays.length} sub="to completion" color="bg-rose-50 text-rose-600" />
+            </div>
+
+            {/* Resources panel */}
+            {showResources && (
+              <div className="bg-white rounded-xl border border-slate-200 shadow-card overflow-hidden">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                  <h2 className="font-semibold text-slate-900 flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-primary" />
+                    Practice Resources & Weekly Projects
+                  </h2>
+                  <button onClick={() => setShowResources(false)} className="text-slate-400 hover:text-slate-700 transition-colors">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+                  <div className="p-6">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-3">Free Practice Media</h3>
+                    <ul className="space-y-2.5">
+                      {[
+                        { label: 'Video Footage', val: resourceData.video },
+                        { label: 'Gaming Clips', val: resourceData.gaming },
+                        { label: 'Cinematic', val: resourceData.cinematic },
+                        { label: 'Audio & SFX', val: resourceData.audio },
+                      ].map(r => (
+                        <li key={r.label} className="flex flex-col gap-0.5">
+                          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{r.label}</span>
+                          <span className="text-sm text-slate-600">{r.val}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="p-6">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-3">Weekly Portfolio Projects</h3>
+                    <div className="space-y-3">
+                      {projectData.map(proj => {
+                        const c = WEEK_COLORS[proj.week];
+                        return (
+                          <div key={proj.week} className={`p-4 rounded-lg border ${c.border} ${c.bg}`}>
+                            <div className="flex items-center gap-2 mb-1">
+                              <WeekBadge week={proj.week} />
+                              <span className={`text-sm font-semibold ${c.text}`}>{proj.title}</span>
+                            </div>
+                            <p className="text-xs text-slate-600 leading-relaxed">{proj.desc}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Table card */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm min-w-[1300px]">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <th className="p-4 w-14 text-center">
+                        <span className="sr-only">Status</span>
+                      </th>
+                      <th className="p-4 w-16 text-xs font-semibold text-slate-500 uppercase tracking-wider">Day</th>
+                      <th className="p-4 w-20 text-xs font-semibold text-slate-500 uppercase tracking-wider">Week</th>
+                      <th className="p-4 min-w-[200px] text-xs font-semibold text-slate-500 uppercase tracking-wider">Topic</th>
+                      <th className="p-4 min-w-[280px] text-xs font-semibold text-slate-500 uppercase tracking-wider">Daily Assignment</th>
+                      <th className="p-4 min-w-[240px] text-xs font-semibold text-slate-500 uppercase tracking-wider">Step-by-Step</th>
+                      <th className="p-4 min-w-[200px] text-xs font-semibold text-slate-500 uppercase tracking-wider">Practice Task</th>
+                      <th className="p-4 min-w-[200px] text-xs font-semibold text-slate-500 uppercase tracking-wider">Mini Challenge</th>
+                      <th className="p-4 min-w-[180px] text-xs font-semibold text-slate-500 uppercase tracking-wider">Mistakes</th>
+                      <th className="p-4 min-w-[180px] text-xs font-semibold text-slate-500 uppercase tracking-wider">Shortcuts</th>
+                      <th className="p-4 min-w-[140px] text-xs font-semibold text-slate-500 uppercase tracking-wider">Tutorial</th>
+                      <th className="p-4 w-20 text-xs font-semibold text-slate-500 uppercase tracking-wider">Diff.</th>
+                      <th className="p-4 min-w-[240px] text-xs font-semibold text-slate-500 uppercase tracking-wider">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredData.map((day) => {
+                      const isDone = completedDays.includes(day.day);
+                      return (
+                        <tr
+                          key={day.day}
+                          className={`tracker-row transition-colors ${isDone ? 'completed' : ''}`}
+                        >
+                          {/* Status */}
+                          <td
+                            className="p-4 text-center align-top cursor-pointer"
+                            onClick={() => toggleDay(day.day)}
+                            title={isDone ? 'Mark incomplete' : 'Mark complete'}
+                          >
+                            {isDone ? (
+                              <CheckCircle className="w-5 h-5 text-emerald-500 mx-auto" />
+                            ) : (
+                              <Circle className="w-5 h-5 text-slate-300 hover:text-primary mx-auto transition-colors" />
+                            )}
+                          </td>
+
+                          {/* Day */}
+                          <td className="p-4 align-top">
+                            <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
+                              isDone ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {day.day}
+                            </span>
+                          </td>
+
+                          {/* Week */}
+                          <td className="p-4 align-top">
+                            <WeekBadge week={day.week} />
+                          </td>
+
+                          {/* Topic */}
+                          <td className="p-4 align-top">
+                            <span className={`text-sm font-semibold leading-snug ${isDone ? 'text-slate-400 line-through' : 'text-slate-900'}`} style={{ whiteSpace: 'normal' }}>
+                              {day.topic}
+                            </span>
+                          </td>
+
+                          {/* Assignment */}
+                          <td className="p-4 align-top">
+                            <p className="text-sm text-primary font-medium leading-snug" style={{ whiteSpace: 'normal' }}>{day.assignment}</p>
+                          </td>
+
+                          {/* Learning steps */}
+                          <td className="p-4 align-top">
+                            <ul className="space-y-1" style={{ whiteSpace: 'normal' }}>
+                              {day.learning.split(/(?=\d\.)/g).map((item, i) => (
+                                <li key={i} className="flex items-start gap-1.5 text-xs text-slate-600">
+                                  <ChevronRight className="w-3 h-3 text-slate-400 flex-shrink-0 mt-0.5" />
+                                  <span>{item.trim()}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </td>
+
+                          {/* Practice */}
+                          <td className="p-4 align-top">
+                            <p className="text-xs text-slate-600 leading-relaxed" style={{ whiteSpace: 'normal' }}>{day.practice}</p>
+                          </td>
+
+                          {/* Challenge */}
+                          <td className="p-4 align-top">
+                            <p className="text-xs text-amber-700 leading-relaxed font-medium" style={{ whiteSpace: 'normal' }}>{day.challenge}</p>
+                          </td>
+
+                          {/* Mistakes */}
+                          <td className="p-4 align-top">
+                            <p className="text-xs text-rose-600 leading-relaxed" style={{ whiteSpace: 'normal' }}>{day.mistakes}</p>
+                          </td>
+
+                          {/* Shortcuts */}
+                          <td className="p-4 align-top">
+                            <p className="text-xs font-mono text-slate-600 leading-relaxed bg-slate-50 rounded-md px-2 py-1.5 border border-slate-100" style={{ whiteSpace: 'normal' }}>{day.shortcuts}</p>
+                          </td>
+
+                          {/* Tutorial */}
+                          <td className="p-4 align-top">
+                            <a
+                              href={day.linkUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-start gap-1.5 text-xs text-primary hover:text-primary-hover hover:underline transition-colors"
+                              style={{ whiteSpace: 'normal' }}
+                            >
+                              <ExternalLink className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                              <span className="line-clamp-2">{day.linkText}</span>
+                            </a>
+                          </td>
+
+                          {/* Difficulty */}
+                          <td className="p-4 align-top">
+                            <DifficultyBadge difficulty={day.difficulty} />
+                          </td>
+
+                          {/* Notes */}
+                          <td className="p-4 align-top">
+                            <input
+                              type="text"
+                              placeholder="Notes, time, rating..."
+                              className="feedback-input w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-700 placeholder-slate-400 transition-all"
+                              value={feedbackData[day.day] || ''}
+                              onChange={(e) => updateFeedback(day.day, e.target.value)}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Table footer */}
+              <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                <p className="text-xs text-slate-500">
+                  Showing {filteredData.length} lessons &bull; {filteredData.filter(d => completedDays.includes(d.day)).length} completed
+                </p>
+                <div className="flex items-center gap-3">
+                  <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+                    Completed
+                  </span>
+                  <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <span className="w-2 h-2 rounded-full bg-slate-300 inline-block" />
+                    Pending
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
