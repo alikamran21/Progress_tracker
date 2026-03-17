@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Download, CheckCircle, Circle, ExternalLink, BookOpen,
   Video, Info, Share2, Check, ChevronRight, Zap, Target,
-  Trophy, BarChart2, X, Menu
+  Trophy, BarChart2, X, Menu, Moon, Sun, User, Users
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { getFirestore, doc, onSnapshot, setDoc, collection, getDocs } from 'firebase/firestore';
 
 // ==========================================
 // FIREBASE CONFIG
@@ -77,21 +77,21 @@ const projectData = [
 ];
 
 const WEEK_COLORS = {
-  1: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-500' },
-  2: { bg: 'bg-violet-50', text: 'text-violet-700', border: 'border-violet-200', dot: 'bg-violet-500' },
-  3: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', dot: 'bg-amber-500' },
-  4: { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', dot: 'bg-rose-500' },
+  1: { bg: 'bg-blue-50 dark:bg-blue-950/40', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-800', dot: 'bg-blue-500' },
+  2: { bg: 'bg-violet-50 dark:bg-violet-950/40', text: 'text-violet-700 dark:text-violet-300', border: 'border-violet-200 dark:border-violet-800', dot: 'bg-violet-500' },
+  3: { bg: 'bg-amber-50 dark:bg-amber-950/40', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-800', dot: 'bg-amber-500' },
+  4: { bg: 'bg-rose-50 dark:bg-rose-950/40', text: 'text-rose-700 dark:text-rose-300', border: 'border-rose-200 dark:border-rose-800', dot: 'bg-rose-500' },
 };
 
 function DifficultyBadge({ difficulty }) {
-  const [current, total] = difficulty.split('/').map(Number);
+  const [current] = difficulty.split('/').map(Number);
   const isEasy = current <= 3;
   const isMed = current <= 6;
   const cls = isEasy
-    ? 'bg-emerald-50 text-emerald-700'
+    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
     : isMed
-    ? 'bg-amber-50 text-amber-700'
-    : 'bg-rose-50 text-rose-700';
+    ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+    : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300';
   return (
     <span className={`badge ${cls} border border-current/20`} style={{ fontSize: '0.65rem', padding: '0.15rem 0.45rem' }}>
       {difficulty}
@@ -110,14 +110,119 @@ function WeekBadge({ week }) {
 
 function StatCard({ icon: Icon, label, value, sub, color }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-100 p-5 shadow-card flex items-start gap-4">
+    <div className="bg-surface rounded-xl border border-border p-5 shadow-card flex items-start gap-4">
       <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${color}`}>
         <Icon className="w-5 h-5" />
       </div>
       <div>
-        <p className="text-2xl font-semibold text-slate-900 leading-none">{value}</p>
-        <p className="text-sm text-slate-500 mt-1">{label}</p>
-        {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
+        <p className="text-2xl font-semibold text-text leading-none">{value}</p>
+        <p className="text-sm text-text-secondary mt-1">{label}</p>
+        {sub && <p className="text-xs text-text-muted mt-0.5">{sub}</p>}
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// USER NAME MODAL
+// ==========================================
+function NameModal({ onSave }) {
+  const [name, setName] = useState('');
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (trimmed) onSave(trimmed);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-surface border border-border rounded-2xl shadow-2xl w-full max-w-sm p-8">
+        <div className="flex justify-center mb-5">
+          <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center">
+            <User className="w-7 h-7 text-primary" />
+          </div>
+        </div>
+        <h2 className="text-xl font-bold text-text text-center mb-1">Who are you?</h2>
+        <p className="text-sm text-text-secondary text-center mb-6 leading-relaxed">
+          Enter your name so your progress is saved separately and visible to others sharing this tracker.
+        </p>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder="e.g. Ali, Alex, Sarah..."
+            maxLength={32}
+            className="feedback-input w-full bg-surface-raised border border-border rounded-xl px-4 py-3 text-sm text-text placeholder-text-muted transition-all"
+            value={name}
+            onChange={e => setName(e.target.value)}
+          />
+          <button
+            type="submit"
+            disabled={!name.trim()}
+            className="w-full bg-primary hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-xl px-4 py-3 text-sm transition-all"
+          >
+            Start Tracking
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// COMPANION PANEL — see other people's progress
+// ==========================================
+function CompanionPanel({ trackerId, myName, db }) {
+  const [companions, setCompanions] = useState([]);
+
+  useEffect(() => {
+    if (!db || !trackerId) return;
+    const colRef = collection(db, 'trackers', trackerId, 'users');
+    const unsub = onSnapshot(colRef, (snap) => {
+      const data = snap.docs
+        .map(d => ({ name: d.id, ...d.data() }))
+        .filter(u => u.name !== myName)
+        .sort((a, b) => (b.completedDays?.length || 0) - (a.completedDays?.length || 0));
+      setCompanions(data);
+    });
+    return () => unsub();
+  }, [db, trackerId, myName]);
+
+  if (companions.length === 0) return null;
+
+  return (
+    <div className="bg-surface rounded-xl border border-border shadow-card p-5">
+      <h3 className="text-sm font-semibold text-text flex items-center gap-2 mb-4">
+        <Users className="w-4 h-4 text-primary" />
+        Others on this Tracker
+      </h3>
+      <div className="flex flex-col gap-3">
+        {companions.map(c => {
+          const pct = Math.round(((c.completedDays?.length || 0) / 28) * 100);
+          return (
+            <div key={c.name} className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <span className="text-xs font-bold text-primary">{c.name.charAt(0).toUpperCase()}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-semibold text-text truncate">{c.name}</span>
+                  <span className="text-xs text-text-muted ml-2 flex-shrink-0">{c.completedDays?.length || 0}/28</span>
+                </div>
+                <div className="progress-bar">
+                  <div className="progress-fill" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+              <span className="text-xs font-semibold text-text-secondary w-9 text-right flex-shrink-0">{pct}%</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -129,11 +234,28 @@ export default function App() {
   const [activeWeekFilter, setActiveWeekFilter] = useState('All');
   const [showResources, setShowResources] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    return localStorage.getItem('darkMode') === 'true';
+  });
 
   const [user, setUser] = useState(null);
   const [trackerId, setTrackerId] = useState('');
+  const [myName, setMyName] = useState(() => localStorage.getItem('trackerName') || '');
+  const [showNameModal, setShowNameModal] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Apply dark mode class to html element
+  useEffect(() => {
+    const html = document.documentElement;
+    if (darkMode) {
+      html.classList.add('dark');
+    } else {
+      html.classList.remove('dark');
+    }
+    localStorage.setItem('darkMode', darkMode);
+  }, [darkMode]);
+
+  // Auth + stable tracker ID from URL hash
   useEffect(() => {
     if (!auth) return;
     const initAuth = async () => {
@@ -141,36 +263,58 @@ export default function App() {
     };
     initAuth();
     const unsubscribe = onAuthStateChanged(auth, setUser);
+
+    // Use a stable hash — create once and persist in URL
     let currentHash = window.location.hash.replace('#', '');
     if (!currentHash) {
       currentHash = crypto.randomUUID();
       window.location.hash = currentHash;
     }
     setTrackerId(currentHash);
+
     const handleHashChange = () => setTrackerId(window.location.hash.replace('#', ''));
     window.addEventListener('hashchange', handleHashChange);
     return () => { unsubscribe(); window.removeEventListener('hashchange', handleHashChange); };
   }, []);
 
+  // Show name modal if name not set
   useEffect(() => {
-    if (!user || !trackerId || !db) return;
-    const docRef = doc(db, 'trackers', trackerId);
-    const unsubscribeDb = onSnapshot(docRef, (snapshot) => {
+    if (trackerId && !myName) {
+      setShowNameModal(true);
+    }
+  }, [trackerId, myName]);
+
+  // Subscribe to MY progress doc: trackers/{trackerId}/users/{myName}
+  useEffect(() => {
+    if (!user || !trackerId || !myName || !db) return;
+    const docRef = doc(db, 'trackers', trackerId, 'users', myName);
+    const unsub = onSnapshot(docRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
         setCompletedDays(data.completedDays || []);
         setFeedbackData(data.feedbackData || {});
       }
     }, (error) => console.error("Firestore error:", error));
-    return () => unsubscribeDb();
-  }, [user, trackerId]);
+    return () => unsub();
+  }, [user, trackerId, myName]);
 
   const saveToDb = async (newCompleted, newFeedback) => {
-    if (!user || !trackerId || !db) return;
+    if (!user || !trackerId || !myName || !db) return;
     try {
-      const docRef = doc(db, 'trackers', trackerId);
-      await setDoc(docRef, { completedDays: newCompleted, feedbackData: newFeedback, updatedAt: Date.now() }, { merge: true });
+      const docRef = doc(db, 'trackers', trackerId, 'users', myName);
+      await setDoc(docRef, {
+        completedDays: newCompleted,
+        feedbackData: newFeedback,
+        updatedAt: Date.now(),
+        displayName: myName,
+      }, { merge: true });
     } catch (error) { console.error("Error saving data:", error); }
+  };
+
+  const handleNameSave = (name) => {
+    localStorage.setItem('trackerName', name);
+    setMyName(name);
+    setShowNameModal(false);
   };
 
   const toggleDay = (dayNum) => {
@@ -224,7 +368,8 @@ export default function App() {
   const navWeeks = ['All', '1', '2', '3', '4'];
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
+    <div className={`flex h-screen overflow-hidden bg-bg font-sans`}>
+      {showNameModal && <NameModal onSave={handleNameSave} />}
 
       {/* Sidebar overlay for mobile */}
       {sidebarOpen && (
@@ -232,14 +377,15 @@ export default function App() {
       )}
 
       {/* Sidebar */}
-      <aside className={`
-        fixed md:static inset-y-0 left-0 z-30
-        w-64 flex-shrink-0 flex flex-col
-        bg-sidebar-DEFAULT text-sidebar-text
-        transition-transform duration-200
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-      `} style={{ background: '#0f172a' }}>
-
+      <aside
+        className={`
+          fixed md:static inset-y-0 left-0 z-30
+          w-64 flex-shrink-0 flex flex-col
+          transition-transform duration-200
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+        `}
+        style={{ background: 'var(--color-sidebar)' }}
+      >
         {/* Logo */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-white/10">
           <div className="flex items-center gap-3">
@@ -248,29 +394,49 @@ export default function App() {
             </div>
             <div>
               <p className="text-sm font-semibold text-white leading-none">DaVinci</p>
-              <p className="text-xs text-slate-400 leading-none mt-0.5">Masterclass</p>
+              <p className="text-xs leading-none mt-0.5" style={{ color: 'var(--color-sidebar-text)' }}>Masterclass</p>
             </div>
           </div>
-          <button onClick={() => setSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white">
+          <button onClick={() => setSidebarOpen(false)} className="md:hidden hover:text-white transition-colors" style={{ color: 'var(--color-sidebar-text)' }}>
             <X className="w-4 h-4" />
           </button>
         </div>
 
+        {/* User identity */}
+        {myName && (
+          <div className="px-6 py-3 border-b border-white/10 flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                <span className="text-xs font-bold text-white">{myName.charAt(0).toUpperCase()}</span>
+              </div>
+              <span className="text-sm font-medium text-white truncate">{myName}</span>
+            </div>
+            <button
+              onClick={() => { localStorage.removeItem('trackerName'); setMyName(''); setShowNameModal(true); }}
+              className="text-xs flex-shrink-0 ml-2 transition-colors hover:text-white"
+              style={{ color: 'var(--color-sidebar-text)' }}
+              title="Switch user"
+            >
+              Switch
+            </button>
+          </div>
+        )}
+
         {/* Progress summary */}
         <div className="px-6 py-5 border-b border-white/10">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Overall Progress</span>
+            <span className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--color-sidebar-text)' }}>My Progress</span>
             <span className="text-xs font-semibold text-white">{progressPercentage}%</span>
           </div>
           <div className="progress-bar">
             <div className="progress-fill" style={{ width: `${progressPercentage}%` }} />
           </div>
-          <p className="text-xs text-slate-400 mt-2">{completedDays.length} of 28 days complete</p>
+          <p className="text-xs mt-2" style={{ color: 'var(--color-sidebar-text)' }}>{completedDays.length} of 28 days complete</p>
         </div>
 
         {/* Week navigation */}
         <nav className="flex-1 px-4 py-4 overflow-y-auto">
-          <p className="text-xs font-medium text-slate-500 uppercase tracking-wider px-2 mb-3">Filter by Week</p>
+          <p className="text-xs font-medium uppercase tracking-wider px-2 mb-3" style={{ color: 'var(--color-sidebar-text)', opacity: 0.7 }}>Filter by Week</p>
           {navWeeks.map(week => {
             const isActive = activeWeekFilter === week;
             const label = week === 'All' ? 'Full Program' : `Week ${week}`;
@@ -285,26 +451,28 @@ export default function App() {
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg mb-1 text-sm font-medium transition-all ${
                   isActive
                     ? 'bg-primary text-white'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                    : 'hover:bg-white/5'
                 }`}
+                style={!isActive ? { color: 'var(--color-sidebar-text)' } : undefined}
               >
                 <div className="flex items-center gap-2.5">
-                  {week !== 'All' && <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive ? 'bg-white' : c.dot}`} />}
+                  {week !== 'All' && <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive ? 'bg-white' : c?.dot}`} />}
                   <span>{label}</span>
                 </div>
-                <span className={`text-xs ${isActive ? 'text-white/70' : 'text-slate-500'}`}>{done}/{total}</span>
+                <span className={`text-xs ${isActive ? 'text-white/70' : 'opacity-50'}`}>{done}/{total}</span>
               </button>
             );
           })}
 
           {/* Resources toggle */}
           <div className="mt-6">
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-wider px-2 mb-3">Quick Access</p>
+            <p className="text-xs font-medium uppercase tracking-wider px-2 mb-3" style={{ color: 'var(--color-sidebar-text)', opacity: 0.7 }}>Quick Access</p>
             <button
               onClick={() => setShowResources(v => !v)}
               className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                showResources ? 'bg-primary text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'
+                showResources ? 'bg-primary text-white' : 'hover:bg-white/5'
               }`}
+              style={!showResources ? { color: 'var(--color-sidebar-text)' } : undefined}
             >
               <BookOpen className="w-4 h-4 flex-shrink-0" />
               <span>Resources & Projects</span>
@@ -317,8 +485,9 @@ export default function App() {
           <button
             onClick={copyShareLink}
             className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-              copied ? 'bg-emerald-600 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
+              copied ? 'bg-emerald-600 text-white' : 'bg-white/5 hover:bg-white/10 hover:text-white'
             }`}
+            style={!copied ? { color: 'var(--color-sidebar-text)' } : undefined}
           >
             {copied ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
             {copied ? 'Link Copied!' : 'Share Progress Link'}
@@ -337,22 +506,30 @@ export default function App() {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
         {/* Top header bar */}
-        <header className="flex-shrink-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between gap-4" style={{ boxShadow: '0 1px 0 0 #e2e8f0' }}>
+        <header className="flex-shrink-0 bg-surface border-b border-border px-6 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4 min-w-0">
-            <button onClick={() => setSidebarOpen(true)} className="md:hidden text-slate-500 hover:text-slate-900 flex-shrink-0">
+            <button onClick={() => setSidebarOpen(true)} className="md:hidden text-text-secondary hover:text-text flex-shrink-0">
               <Menu className="w-5 h-5" />
             </button>
             <div className="min-w-0">
-              <h1 className="text-base font-semibold text-slate-900 leading-none truncate">
+              <h1 className="text-base font-semibold text-text leading-none truncate">
                 {activeWeekFilter === 'All' ? 'Full 28-Day Program' : `Week ${activeWeekFilter} — ${['Interface & Foundations', 'Storytelling & Effects', 'Advanced Techniques', 'Mastery & Portfolio'][parseInt(activeWeekFilter) - 1]}`}
               </h1>
-              <p className="text-xs text-slate-400 mt-1">{filteredData.length} lessons &bull; {filteredData.filter(d => completedDays.includes(d.day)).length} completed</p>
+              <p className="text-xs text-text-muted mt-1">{filteredData.length} lessons &bull; {filteredData.filter(d => completedDays.includes(d.day)).length} completed</p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="hidden sm:flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
+            {/* Dark mode toggle */}
+            <button
+              onClick={() => setDarkMode(v => !v)}
+              className="w-9 h-9 rounded-lg border border-border bg-surface-raised flex items-center justify-center text-text-secondary hover:text-text transition-colors"
+              title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+            <div className="hidden sm:flex items-center gap-2 bg-surface-raised border border-border rounded-lg px-3 py-1.5">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-xs font-medium text-slate-600">Cloud sync active</span>
+              <span className="text-xs font-medium text-text-secondary">Cloud sync active</span>
             </div>
           </div>
         </header>
@@ -363,8 +540,8 @@ export default function App() {
 
             {/* Stats row */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard icon={BarChart2} label="Overall Progress" value={`${progressPercentage}%`} sub={`${completedDays.length}/28 days`} color="bg-blue-50 text-blue-600" />
-              <StatCard icon={Trophy} label="Week 1 Complete" value={`${weekCompletions[0]}/7`} color="bg-violet-50 text-violet-600" />
+              <StatCard icon={BarChart2} label="Overall Progress" value={`${progressPercentage}%`} sub={`${completedDays.length}/28 days`} color="bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" />
+              <StatCard icon={Trophy} label="Week 1 Complete" value={`${weekCompletions[0]}/7`} color="bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-400" />
               <StatCard icon={Target} label="Current Streak" value={(() => {
                 let streak = 0;
                 for (let i = 28; i >= 1; i--) {
@@ -372,25 +549,30 @@ export default function App() {
                   else break;
                 }
                 return streak;
-              })()} sub="days in a row" color="bg-amber-50 text-amber-600" />
-              <StatCard icon={Zap} label="Remaining Days" value={28 - completedDays.length} sub="to completion" color="bg-rose-50 text-rose-600" />
+              })()} sub="days in a row" color="bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400" />
+              <StatCard icon={Zap} label="Remaining Days" value={28 - completedDays.length} sub="to completion" color="bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400" />
             </div>
+
+            {/* Companion panel */}
+            {myName && trackerId && (
+              <CompanionPanel trackerId={trackerId} myName={myName} db={db} />
+            )}
 
             {/* Resources panel */}
             {showResources && (
-              <div className="bg-white rounded-xl border border-slate-200 shadow-card overflow-hidden">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                  <h2 className="font-semibold text-slate-900 flex items-center gap-2">
+              <div className="bg-surface rounded-xl border border-border shadow-card overflow-hidden">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+                  <h2 className="font-semibold text-text flex items-center gap-2">
                     <BookOpen className="w-4 h-4 text-primary" />
                     Practice Resources & Weekly Projects
                   </h2>
-                  <button onClick={() => setShowResources(false)} className="text-slate-400 hover:text-slate-700 transition-colors">
+                  <button onClick={() => setShowResources(false)} className="text-text-muted hover:text-text transition-colors">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-border">
                   <div className="p-6">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-3">Free Practice Media</h3>
+                    <h3 className="text-sm font-semibold text-text-secondary mb-3">Free Practice Media</h3>
                     <ul className="space-y-2.5">
                       {[
                         { label: 'Video Footage', val: resourceData.video },
@@ -399,14 +581,14 @@ export default function App() {
                         { label: 'Audio & SFX', val: resourceData.audio },
                       ].map(r => (
                         <li key={r.label} className="flex flex-col gap-0.5">
-                          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{r.label}</span>
-                          <span className="text-sm text-slate-600">{r.val}</span>
+                          <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">{r.label}</span>
+                          <span className="text-sm text-text-secondary">{r.val}</span>
                         </li>
                       ))}
                     </ul>
                   </div>
                   <div className="p-6">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-3">Weekly Portfolio Projects</h3>
+                    <h3 className="text-sm font-semibold text-text-secondary mb-3">Weekly Portfolio Projects</h3>
                     <div className="space-y-3">
                       {projectData.map(proj => {
                         const c = WEEK_COLORS[proj.week];
@@ -416,7 +598,7 @@ export default function App() {
                               <WeekBadge week={proj.week} />
                               <span className={`text-sm font-semibold ${c.text}`}>{proj.title}</span>
                             </div>
-                            <p className="text-xs text-slate-600 leading-relaxed">{proj.desc}</p>
+                            <p className="text-xs text-text-secondary leading-relaxed">{proj.desc}</p>
                           </div>
                         );
                       })}
@@ -427,29 +609,29 @@ export default function App() {
             )}
 
             {/* Table card */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-card overflow-hidden">
+            <div className="bg-surface rounded-xl border border-border shadow-card overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm min-w-[1300px]">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200">
+                    <tr className="bg-surface-raised border-b border-border">
                       <th className="p-4 w-14 text-center">
                         <span className="sr-only">Status</span>
                       </th>
-                      <th className="p-4 w-16 text-xs font-semibold text-slate-500 uppercase tracking-wider">Day</th>
-                      <th className="p-4 w-20 text-xs font-semibold text-slate-500 uppercase tracking-wider">Week</th>
-                      <th className="p-4 min-w-[200px] text-xs font-semibold text-slate-500 uppercase tracking-wider">Topic</th>
-                      <th className="p-4 min-w-[280px] text-xs font-semibold text-slate-500 uppercase tracking-wider">Daily Assignment</th>
-                      <th className="p-4 min-w-[240px] text-xs font-semibold text-slate-500 uppercase tracking-wider">Step-by-Step</th>
-                      <th className="p-4 min-w-[200px] text-xs font-semibold text-slate-500 uppercase tracking-wider">Practice Task</th>
-                      <th className="p-4 min-w-[200px] text-xs font-semibold text-slate-500 uppercase tracking-wider">Mini Challenge</th>
-                      <th className="p-4 min-w-[180px] text-xs font-semibold text-slate-500 uppercase tracking-wider">Mistakes</th>
-                      <th className="p-4 min-w-[180px] text-xs font-semibold text-slate-500 uppercase tracking-wider">Shortcuts</th>
-                      <th className="p-4 min-w-[140px] text-xs font-semibold text-slate-500 uppercase tracking-wider">Tutorial</th>
-                      <th className="p-4 w-20 text-xs font-semibold text-slate-500 uppercase tracking-wider">Diff.</th>
-                      <th className="p-4 min-w-[240px] text-xs font-semibold text-slate-500 uppercase tracking-wider">Notes</th>
+                      <th className="p-4 w-16 text-xs font-semibold text-text-muted uppercase tracking-wider">Day</th>
+                      <th className="p-4 w-20 text-xs font-semibold text-text-muted uppercase tracking-wider">Week</th>
+                      <th className="p-4 min-w-[200px] text-xs font-semibold text-text-muted uppercase tracking-wider">Topic</th>
+                      <th className="p-4 min-w-[280px] text-xs font-semibold text-text-muted uppercase tracking-wider">Daily Assignment</th>
+                      <th className="p-4 min-w-[240px] text-xs font-semibold text-text-muted uppercase tracking-wider">Step-by-Step</th>
+                      <th className="p-4 min-w-[200px] text-xs font-semibold text-text-muted uppercase tracking-wider">Practice Task</th>
+                      <th className="p-4 min-w-[200px] text-xs font-semibold text-text-muted uppercase tracking-wider">Mini Challenge</th>
+                      <th className="p-4 min-w-[180px] text-xs font-semibold text-text-muted uppercase tracking-wider">Mistakes</th>
+                      <th className="p-4 min-w-[180px] text-xs font-semibold text-text-muted uppercase tracking-wider">Shortcuts</th>
+                      <th className="p-4 min-w-[140px] text-xs font-semibold text-text-muted uppercase tracking-wider">Tutorial</th>
+                      <th className="p-4 w-20 text-xs font-semibold text-text-muted uppercase tracking-wider">Diff.</th>
+                      <th className="p-4 min-w-[240px] text-xs font-semibold text-text-muted uppercase tracking-wider">Notes</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-border">
                     {filteredData.map((day) => {
                       const isDone = completedDays.includes(day.day);
                       return (
@@ -466,14 +648,16 @@ export default function App() {
                             {isDone ? (
                               <CheckCircle className="w-5 h-5 text-emerald-500 mx-auto" />
                             ) : (
-                              <Circle className="w-5 h-5 text-slate-300 hover:text-primary mx-auto transition-colors" />
+                              <Circle className="w-5 h-5 text-text-muted hover:text-primary mx-auto transition-colors" />
                             )}
                           </td>
 
                           {/* Day */}
                           <td className="p-4 align-top">
                             <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
-                              isDone ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                              isDone
+                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+                                : 'bg-surface-raised text-text-secondary'
                             }`}>
                               {day.day}
                             </span>
@@ -486,7 +670,7 @@ export default function App() {
 
                           {/* Topic */}
                           <td className="p-4 align-top">
-                            <span className={`text-sm font-semibold leading-snug ${isDone ? 'text-slate-400 line-through' : 'text-slate-900'}`} style={{ whiteSpace: 'normal' }}>
+                            <span className={`text-sm font-semibold leading-snug ${isDone ? 'text-text-muted line-through' : 'text-text'}`} style={{ whiteSpace: 'normal' }}>
                               {day.topic}
                             </span>
                           </td>
@@ -500,8 +684,8 @@ export default function App() {
                           <td className="p-4 align-top">
                             <ul className="space-y-1" style={{ whiteSpace: 'normal' }}>
                               {day.learning.split(/(?=\d\.)/g).map((item, i) => (
-                                <li key={i} className="flex items-start gap-1.5 text-xs text-slate-600">
-                                  <ChevronRight className="w-3 h-3 text-slate-400 flex-shrink-0 mt-0.5" />
+                                <li key={i} className="flex items-start gap-1.5 text-xs text-text-secondary">
+                                  <ChevronRight className="w-3 h-3 text-text-muted flex-shrink-0 mt-0.5" />
                                   <span>{item.trim()}</span>
                                 </li>
                               ))}
@@ -510,22 +694,22 @@ export default function App() {
 
                           {/* Practice */}
                           <td className="p-4 align-top">
-                            <p className="text-xs text-slate-600 leading-relaxed" style={{ whiteSpace: 'normal' }}>{day.practice}</p>
+                            <p className="text-xs text-text-secondary leading-relaxed" style={{ whiteSpace: 'normal' }}>{day.practice}</p>
                           </td>
 
                           {/* Challenge */}
                           <td className="p-4 align-top">
-                            <p className="text-xs text-amber-700 leading-relaxed font-medium" style={{ whiteSpace: 'normal' }}>{day.challenge}</p>
+                            <p className="text-xs text-amber-600 dark:text-amber-400 leading-relaxed font-medium" style={{ whiteSpace: 'normal' }}>{day.challenge}</p>
                           </td>
 
                           {/* Mistakes */}
                           <td className="p-4 align-top">
-                            <p className="text-xs text-rose-600 leading-relaxed" style={{ whiteSpace: 'normal' }}>{day.mistakes}</p>
+                            <p className="text-xs text-rose-600 dark:text-rose-400 leading-relaxed" style={{ whiteSpace: 'normal' }}>{day.mistakes}</p>
                           </td>
 
                           {/* Shortcuts */}
                           <td className="p-4 align-top">
-                            <p className="text-xs font-mono text-slate-600 leading-relaxed bg-slate-50 rounded-md px-2 py-1.5 border border-slate-100" style={{ whiteSpace: 'normal' }}>{day.shortcuts}</p>
+                            <p className="text-xs font-mono text-text-secondary leading-relaxed bg-surface-raised rounded-md px-2 py-1.5 border border-border" style={{ whiteSpace: 'normal' }}>{day.shortcuts}</p>
                           </td>
 
                           {/* Tutorial */}
@@ -552,7 +736,7 @@ export default function App() {
                             <input
                               type="text"
                               placeholder="Notes, time, rating..."
-                              className="feedback-input w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-700 placeholder-slate-400 transition-all"
+                              className="feedback-input w-full bg-surface-raised border border-border rounded-lg px-3 py-2 text-xs text-text placeholder-text-muted transition-all"
                               value={feedbackData[day.day] || ''}
                               onChange={(e) => updateFeedback(day.day, e.target.value)}
                             />
@@ -565,17 +749,17 @@ export default function App() {
               </div>
 
               {/* Table footer */}
-              <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-                <p className="text-xs text-slate-500">
+              <div className="px-6 py-3 bg-surface-raised border-t border-border flex items-center justify-between">
+                <p className="text-xs text-text-muted">
                   Showing {filteredData.length} lessons &bull; {filteredData.filter(d => completedDays.includes(d.day)).length} completed
                 </p>
                 <div className="flex items-center gap-3">
-                  <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                  <span className="flex items-center gap-1.5 text-xs text-text-muted">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
                     Completed
                   </span>
-                  <span className="flex items-center gap-1.5 text-xs text-slate-500">
-                    <span className="w-2 h-2 rounded-full bg-slate-300 inline-block" />
+                  <span className="flex items-center gap-1.5 text-xs text-text-muted">
+                    <span className="w-2 h-2 rounded-full bg-border inline-block" />
                     Pending
                   </span>
                 </div>
